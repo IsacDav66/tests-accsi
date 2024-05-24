@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video to ASCII</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: monospace;
+            text-align: center;
+            padding: 20px;
+        }
+        #progressBarContainer {
+            width: 100%;
+            background-color: #f3f3f3;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+        }
+        #progressBar {
+            width: 0%;
+            height: 20px;
+            background-color: #4caf50;
+        }
+        #asciiContainer {
+            white-space: pre;
+            font-family: monospace;
+            font-size: 8px;
+            line-height: 8px;
+            overflow: auto;
+            max-width: 100%;
+        }
+        #controls {
+            margin-top: 10px;
+        }
+        #controls button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sube un video y conviértelo a ASCII</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="videoFile" id="videoFile" accept="video/*" required>
+        <button type="submit">Subir y Convertir</button>
+    </form>
+    <div id="progressBarContainer">
+        <div id="progressBar"></div>
+    </div>
+    <audio id="audioPlayer" controls></audio>
+    <pre id="asciiContainer"></pre>
+    <div id="controls">
+        <button id="pauseButton">Pausa</button>
+        <button id="resumeButton" disabled>Reanudar</button>
+        <button id="restartButton">Reiniciar</button>
+    </div>
+
+    <script>
+        let interval;
+        let isPaused = false;
+        let currentFrame = 0;
+        let frames = [];
+
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            clearPreviousData();
+            const formData = new FormData();
+            const fileField = document.getElementById('videoFile');
+            formData.append('videoFile', fileField.files[0]);
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
+
+            xhr.upload.onprogress = function(event) {
+                if (event.lengthComputable) {
+                    const percentComplete = (event.loaded / event.total) * 100;
+                    const progressBar = document.getElementById('progressBar');
+                    progressBar.style.width = percentComplete + '%';
+                    if (percentComplete === 100) {
+                        progressBar.style.width = '100%';
+                    }
+                }
+            };
+
+            xhr.onloadstart = function() {
+                document.getElementById('progressBarContainer').style.display = 'block';
+                document.getElementById('progressBar').style.width = '0%';
+            };
+
+            xhr.onloadend = function() {
+                if (xhr.status === 200) {
+                    checkProcessingProgress();
+                } else {
+                    document.getElementById('asciiContainer').textContent = 'Error al procesar el video.';
+                }
+            };
+
+            xhr.send(formData);
+        });
+
+        function clearPreviousData() {
+            document.getElementById('asciiContainer').textContent = '';
+            const progressBar = document.getElementById('progressBar');
+            progressBar.style.width = '0%';
+        }
+
+        function checkProcessingProgress() {
+            const interval = setInterval(function() {
+                fetch('/progress')
+                    .then(response => response.json())
+                    .then(data => {
+                        const progressBar = document.getElementById('progressBar');
+                        progressBar.style.width = data.progress + '%';
+
+                        if (data.progress >= 100) {
+                            clearInterval(interval);
+                            fetch('/ascii')
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.error) {
+                                        document.getElementById('asciiContainer').textContent = data.error;
+                                    } else {
+                                        fetch('/audio')
+                                            .then(audioResponse => audioResponse.blob())
+                                            .then(audioBlob => {
+                                                const audioUrl = URL.createObjectURL(audioBlob);
+                                                const audioPlayer = document.getElementById('audioPlayer');
+                                                audioPlayer.src = audioUrl;
+                                                frames = data.frames;
+                                                playAsciiVideo(frames, audioPlayer);
+                                            })
+                                            .catch(error => {
+                                                console.error('Error al obtener el audio:', error);
+                                            });
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error:', error);
+                                    document.getElementById('asciiContainer').textContent = 'Error al obtener los frames ASCII.';
+                                });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+            }, 1000);
+        }
+
+        function playAsciiVideo(frames, audioPlayer) {
+            currentFrame = 0;
+            const asciiContainer = document.getElementById('asciiContainer');
+            const frameInterval = 33; // 25ms interval for 40 FPS (increase speed)
+
+            function displayNextFrame() {
+                if (!isPaused) {
+                    if (currentFrame < frames.length) {
+                        asciiContainer.textContent = frames[currentFrame];
+                        currentFrame++;
+                    } else {
+                        clearInterval(interval);
+                    }
+                }
+            }
+
+            audioPlayer.play();
+
+            interval = setInterval(displayNextFrame, frameInterval);
+
+            audioPlayer.addEventListener('ended', () => {
+                clearInterval(interval);
+            });
+
+            document.getElementById('pauseButton').addEventListener('click', () => {
+                isPaused = true;
+                audioPlayer.pause();
+                document.getElementById('pauseButton').disabled = true;
+                document.getElementById('resumeButton').disabled = false;
+            });
+
+            document.getElementById('resumeButton').addEventListener('click', () => {
+                isPaused = false;
+                audioPlayer.play();
+                document.getElementById('pauseButton').disabled = false;
+                document.getElementById('resumeButton').disabled = true;
+            });
+
+            document.getElementById('restartButton').addEventListener('click', () => {
+                isPaused = false;
+                clearInterval(interval);
+                currentFrame = 0;
+                asciiContainer.textContent = '';
+                audioPlayer.currentTime = 0;
+                audioPlayer.play();
+                interval = setInterval(displayNextFrame, frameInterval);
+                document.getElementById('pauseButton').disabled = false;
+                document.getElementById('resumeButton').disabled = true;
+            });
+        }
+    </script>
+</body>
+</html>

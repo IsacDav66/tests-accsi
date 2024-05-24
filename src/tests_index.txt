@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video to ASCII</title>
+    <style>
+        #progressBarContainer {
+            width: 100%;
+            background-color: #f3f3f3;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+        }
+        #progressBar {
+            width: 0%;
+            height: 20px;
+            background-color: #4caf50;
+        }
+        #asciiContainer {
+            white-space: pre;
+            font-family: monospace;
+            font-size: 8px; /* Puedes ajustar el tamaño de la fuente aquí */
+            line-height: 8px; /* Ajustar la altura de la línea para que coincida con el tamaño de la fuente */
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sube un video y conviértelo a ASCII</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="videoFile" id="videoFile" accept="video/*" required>
+        <button type="submit">Subir y Convertir</button>
+    </form>
+    <div id="progressBarContainer">
+        <div id="progressBar"></div>
+    </div>
+    <pre id="asciiContainer"></pre>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData();
+            const fileField = document.getElementById('videoFile');
+            formData.append('videoFile', fileField.files[0]);
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
+
+            xhr.upload.onprogress = function(event) {
+                if (event.lengthComputable) {
+                    const percentComplete = (event.loaded / event.total) * 100;
+                    const progressBar = document.getElementById('progressBar');
+                    progressBar.style.width = percentComplete + '%';
+                    if (percentComplete === 100) {
+                        progressBar.style.width = '100%';
+                    }
+                }
+            };
+
+            xhr.onloadstart = function() {
+                document.getElementById('progressBarContainer').style.display = 'block';
+                document.getElementById('progressBar').style.width = '0%';
+            };
+
+            xhr.onloadend = function() {
+                if (xhr.status === 200) {
+                    checkProcessingProgress();
+                } else {
+                    document.getElementById('asciiContainer').textContent = 'Error al procesar el video.';
+                }
+            };
+
+            xhr.send(formData);
+        });
+
+        function checkProcessingProgress() {
+            const interval = setInterval(function() {
+                fetch('/progress')
+                    .then(response => response.json())
+                    .then(data => {
+                        const progressBar = document.getElementById('progressBar');
+                        progressBar.style.width = data.progress + '%';
+
+                        if (data.progress >= 100) {
+                            clearInterval(interval);
+                            fetch('/ascii')
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.error) {
+                                        document.getElementById('asciiContainer').textContent = data.error;
+                                    } else {
+                                        playAsciiVideo(data.frames);
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error:', error);
+                                    document.getElementById('asciiContainer').textContent = 'Error al obtener los frames ASCII.';
+                                });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+            }, 1000);
+        }
+
+        function playAsciiVideo(frames) {
+            let currentFrame = 0;
+            const asciiContainer = document.getElementById('asciiContainer');
+
+            function displayNextFrame() {
+                asciiContainer.textContent = frames[currentFrame];
+                currentFrame = (currentFrame + 1) % frames.length;
+            }
+
+            setInterval(displayNextFrame, 100); // 100ms interval for 10 FPS
+        }
+    </script>
+</body>
+</html>

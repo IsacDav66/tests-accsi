@@ -1,0 +1,89 @@
+import os
+from flask import Flask, request, send_file, jsonify
+import cv2
+import numpy as np
+import threading
+
+app = Flask(__name__)
+processing_progress = 0
+ascii_frames = []
+
+def video_to_ascii(video_path, new_width=100):
+    global processing_progress, ascii_frames
+    try:
+        cap = cv2.VideoCapture(video_path)
+        ascii_frames = []
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        current_frame = 0
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # Redimensionar el fotograma manteniendo la relación de aspecto
+            height, width = frame.shape[:2]
+            aspect_ratio = height / width
+            new_height = int(aspect_ratio * new_width)
+            resized_frame = cv2.resize(frame, (new_width, new_height))
+
+            # Convertir el fotograma a escala de grises
+            gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
+            ascii_frame = convert_frame_to_ascii(gray_frame)
+            ascii_frames.append(ascii_frame)
+
+            current_frame += 1
+            processing_progress = (current_frame / total_frames) * 100
+
+        cap.release()
+        processing_progress = 100  # Asegurarse de que esté al 100% al finalizar
+    except Exception as e:
+        processing_progress = 0
+        ascii_frames = []
+        print("Error:", str(e))
+
+
+def convert_frame_to_ascii(gray_frame):
+    chars = np.where(gray_frame > 127, 'ñ', '_')
+    ascii_frame = "\n".join("".join(row) for row in chars)
+    return ascii_frame
+
+@app.route("/")
+def index():
+    return send_file('index.html')
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    global processing_progress
+    try:
+        file = request.files['videoFile']
+        if file:
+            file_path = 'uploaded_video.mp4'
+            file.save(file_path)
+            processing_progress = 0
+
+            # Procesar el video en un hilo separado
+            processing_thread = threading.Thread(target=video_to_ascii, args=(file_path,))
+            processing_thread.start()
+            return jsonify(status="processing")
+        else:
+            return jsonify(error="No se ha proporcionado ningún archivo.")
+    except Exception as e:
+        return jsonify(error="Error: {}".format(str(e)))
+
+@app.route('/progress', methods=['GET'])
+def get_progress():
+    global processing_progress
+    return jsonify(progress=processing_progress)
+
+@app.route('/ascii', methods=['GET'])
+def get_ascii_frames():
+    global ascii_frames
+    if processing_progress >= 100:
+        return jsonify(frames=ascii_frames)
+    else:
+        return jsonify(error="El procesamiento no ha terminado.")
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
