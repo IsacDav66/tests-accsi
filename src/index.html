@@ -54,8 +54,8 @@
         <button id="pauseButton">Pausa</button>
         <button id="resumeButton" disabled>Reanudar</button>
         <button id="restartButton">Reiniciar</button>
-    </div>
-
+            </div>
+    
     <script>
         let interval;
         let isPaused = false;
@@ -106,46 +106,46 @@
         }
 
         function checkProcessingProgress() {
-            const interval = setInterval(function() {
-                fetch('/progress')
-                    .then(response => response.json())
-                    .then(data => {
-                        const progressBar = document.getElementById('progressBar');
-                        progressBar.style.width = data.progress + '%';
+    const interval = setInterval(function() {
+        fetch('/progress')
+            .then(response => response.json())
+            .then(data => {
+                const progressBar = document.getElementById('progressBar');
+                progressBar.style.width = data.progress + '%';
 
-                        if (data.progress >= 100) {
-                            clearInterval(interval);
-                            fetch('/ascii')
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.error) {
-                                        document.getElementById('asciiContainer').textContent = data.error;
-                                    } else {
-                                        fetch('/audio')
-                                            .then(audioResponse => audioResponse.blob())
-                                            .then(audioBlob => {
-                                                const audioUrl = URL.createObjectURL(audioBlob);
-                                                const audioPlayer = document.getElementById('audioPlayer');
-                                                audioPlayer.src = audioUrl;
-                                                frames = data.frames;
-                                                playAsciiVideo(frames, audioPlayer);
-                                            })
-                                            .catch(error => {
-                                                console.error('Error al obtener el audio:', error);
-                                            });
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error:', error);
-                                    document.getElementById('asciiContainer').textContent = 'Error al obtener los frames ASCII.';
-                                });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                    });
-            }, 1000);
-        }
+                if (data.progress >= 100) {
+                    clearInterval(interval);
+                    fetch('/ascii')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                document.getElementById('asciiContainer').textContent = data.error;
+                            } else {
+                                fetch('/audio')
+                                    .then(audioResponse => audioResponse.blob())
+                                    .then(audioBlob => {
+                                        const audioUrl = URL.createObjectURL(audioBlob);
+                                        const audioPlayer = document.getElementById('audioPlayer');
+                                        audioPlayer.src = audioUrl;
+                                        frames = data.frames;
+                                        playAsciiVideo(frames, audioPlayer);
+                                                                            })
+                                    .catch(error => {
+                                        console.error('Error al obtener el audio:', error);
+                                    });
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            document.getElementById('asciiContainer').textContent = 'Error al obtener los frames ASCII.';
+                        });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }, 1000);
+}
 
         function playAsciiVideo(frames, audioPlayer) {
             currentFrame = 0;

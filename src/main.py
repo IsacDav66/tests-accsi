@@ -11,9 +11,15 @@ app = Flask(__name__)
 # Variables globales para el progreso de procesamiento y fotogramas ASCII
 processing_progress = 0
 ascii_frames = []
+# Obtener la ruta absoluta del directorio actual
+current_dir = os.path.abspath(os.path.dirname(__file__))
+# Directorio donde se almacenarán los archivos subidos
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.route("/")
 def index():
+    delete_previous_files()  # Eliminar archivos anteriores cuando se recarga la página
     return send_file('index.html')
 
 def main():
@@ -24,12 +30,15 @@ def extract_audio(video_path, audio_path):
     subprocess.call(command, shell=True)
 
 def delete_previous_files():
-    video_path = 'uploaded_video.mp4'
-    audio_path = os.path.join('src', 'uploaded_audio.mp3')
-    if os.path.exists(video_path):
-        os.remove(video_path)
-    if os.path.exists(audio_path):
-        os.remove(audio_path)
+    if os.path.exists(UPLOAD_FOLDER):
+        for filename in os.listdir(UPLOAD_FOLDER):
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                os.rmdir(file_path)
+        os.rmdir(UPLOAD_FOLDER)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def video_to_ascii(video_path, new_width=100):
     global processing_progress, ascii_frames
@@ -83,8 +92,8 @@ def upload_file():
         delete_previous_files()
         ascii_frames = []
         
-        video_path = 'uploaded_video.mp4'
-        audio_path = os.path.join('src', 'uploaded_audio.mp3')
+        video_path = os.path.join(UPLOAD_FOLDER, 'uploaded_video.mp4')
+        audio_path = os.path.join(UPLOAD_FOLDER, 'uploaded_audio.mp3')
         file.save(video_path)
         
         # Extraer el audio del video
@@ -111,11 +120,12 @@ def get_progress():
 
 @app.route('/audio', methods=['GET'])
 def get_audio():
-    audio_path = os.path.join('uploaded_audio.mp3')
-    full_audio_path = os.path.join(app.root_path, audio_path)  # Obtener la ruta completa al archivo de audio
-    if not os.path.exists(full_audio_path):
+    audio_path = os.path.join(os.path.dirname(current_dir),UPLOAD_FOLDER,'uploaded_audio.mp3')
+    print(audio_path)
+    if not os.path.exists(audio_path):
         return jsonify({"error": "Audio file does not exist"}), 404
-    return send_file(full_audio_path, as_attachment=True)
+    return send_file(audio_path, as_attachment=True)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
