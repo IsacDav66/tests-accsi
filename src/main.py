@@ -69,8 +69,10 @@ def video_to_ascii(video_path, new_width=100):
         cap = cv2.VideoCapture(video_path)
         ascii_frames = []
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        current_frame = 0
+        original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
+        current_frame = 0
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -103,12 +105,13 @@ def video_to_ascii(video_path, new_width=100):
 
         # Generar video a partir de los frames
         audio_path = os.path.join(UPLOAD_FOLDER, 'uploaded_audio.mp3')
-        generate_video_from_frames('ascii_frames', 'video_output/ascii_video.mp4', audio_path, fps)
+        generate_video_from_frames('ascii_frames', 'video_output/ascii_video.mp4', audio_path, fps, original_width, original_height)
 
     except Exception as e:
         processing_progress = 0
         ascii_frames = []
         print("Error:", str(e))
+
 
 def convert_frame_to_ascii(gray_frame):
     chars = np.where(gray_frame > 127, 'ñ', '_')
@@ -136,7 +139,8 @@ def upload_file():
         video_thread.start()
         
         # Enviar el resultado al cliente
-        return jsonify({"message": "Processing started"}), 200
+        fps = cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FPS)
+        return jsonify({"message": "Processing started", "fps": fps}), 200
 
 @app.route('/ascii', methods=['GET'])
 def get_ascii():
@@ -170,10 +174,11 @@ def save_frames_as_images(frames, frame_number, width, height):
         d.text((10,10), frame, fill=(255,255,255))
         img.save(image_path)
 
-def generate_video_from_frames(image_folder, output_video_path, audio_path, fps):
+def generate_video_from_frames(image_folder, output_video_path, audio_path, fps, width, height):
     temp_video_path = output_video_path.replace('.mp4', '_temp.mp4')
     command = (
         f'ffmpeg -framerate {fps} -i {image_folder}/frame_%04d.png '
+        f'-vf "scale={width}:{height}" '
         f'-c:v libx264 -r {fps} -pix_fmt yuv420p {temp_video_path}'
     )
     print(f"Running command to generate video: {command}")  # Debugging statement
@@ -196,6 +201,7 @@ def generate_video_from_frames(image_folder, output_video_path, audio_path, fps)
             print("Error adding audio to video.")
     else:
         print("Error generating video.")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
