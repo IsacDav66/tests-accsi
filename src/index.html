@@ -56,150 +56,161 @@
         <button id="restartButton">Reiniciar</button>
             </div>
     
-    <script>
-        let interval;
-        let isPaused = false;
-        let currentFrame = 0;
-        let frames = [];
-        let fps = 25; // Valor por defecto, se actualizará según el FPS del video subido
-
-        document.getElementById('uploadForm').addEventListener('submit', function(event) {
-            event.preventDefault();
-            clearPreviousData();
-            const formData = new FormData();
-            const fileField = document.getElementById('videoFile');
-            formData.append('videoFile', fileField.files[0]);
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-
-            xhr.upload.onprogress = function(event) {
-                if (event.lengthComputable) {
-                    const percentComplete = (event.loaded / event.total) * 100;
-                    const progressBar = document.getElementById('progressBar');
-                    progressBar.style.width = percentComplete + '%';
-                    if (percentComplete === 100) {
-                        progressBar.style.width = '100%';
-                    }
-                }
-            };
-
-            xhr.onloadstart = function() {
-                document.getElementById('progressBarContainer').style.display = 'block';
-                document.getElementById('progressBar').style.width = '0%';
-            };
-
-            xhr.onloadend = function() {
-                if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    fps = response.fps; // Actualizar el FPS del video subido
-                    checkProcessingProgress();
-                } else {
-                    document.getElementById('asciiContainer').textContent = 'Error al procesar el video.';
-                }
-            };
-
-            xhr.send(formData);
-        });
-
-        function clearPreviousData() {
-            document.getElementById('asciiContainer').textContent = '';
-            const progressBar = document.getElementById('progressBar');
-            progressBar.style.width = '0%';
-        }
-
-        function checkProcessingProgress() {
-            const interval = setInterval(function() {
-                fetch('/progress')
-                    .then(response => response.json())
-                    .then(data => {
-                        const progressBar = document.getElementById('progressBar');
-                        progressBar.style.width = data.progress + '%';
-
-                        if (data.progress >= 100) {
-                            clearInterval(interval);
-                            fetch('/ascii')
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.error) {
-                                        document.getElementById('asciiContainer').textContent = data.error;
-                                    } else {
-                                        fetch('/audio')
-                                            .then(audioResponse => audioResponse.blob())
-                                            .then(audioBlob => {
-                                                const audioUrl = URL.createObjectURL(audioBlob);
-                                                const audioPlayer = document.getElementById('audioPlayer');
-                                                audioPlayer.src = audioUrl;
-                                                frames = data.frames;
-                                                playAsciiVideo(frames, audioPlayer, fps); // Pasar el FPS al reproductor
-                                            })
-                                            .catch(error => {
-                                                console.error('Error al obtener el audio:', error);
-                                            });
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error:', error);
-                                    document.getElementById('asciiContainer').textContent = 'Error al obtener los frames ASCII.';
-                                });
+            <script>
+                let interval;
+                let isPaused = false;
+                let currentFrame = 0;
+                let frames = [];
+                let fps = 25; // Valor por defecto, se actualizará según el FPS del video subido
+            
+                document.getElementById('uploadForm').addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    clearPreviousData();
+                    const formData = new FormData();
+                    const fileField = document.getElementById('videoFile');
+                    formData.append('videoFile', fileField.files[0]);
+            
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/upload', true);
+            
+                    xhr.upload.onprogress = function(event) {
+                        if (event.lengthComputable) {
+                            const percentComplete = (event.loaded / event.total) * 100;
+                            const progressBar = document.getElementById('progressBar');
+                            progressBar.style.width = percentComplete + '%';
+                            if (percentComplete === 100) {
+                                progressBar.style.width = '100%';
+                            }
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                    });
-            }, 1000);
-        }
-
-        function playAsciiVideo(frames, audioPlayer, fps) {
-            currentFrame = 0;
-            const asciiContainer = document.getElementById('asciiContainer');
-            const frameInterval = 1000 / fps; // Calcular el intervalo en función del FPS
-
-            function displayNextFrame() {
-                if (!isPaused) {
-                    if (currentFrame < frames.length) {
-                        asciiContainer.textContent = frames[currentFrame];
-                        currentFrame++;
-                    } else {
-                        clearInterval(interval);
-                    }
+                    };
+            
+                    xhr.onloadstart = function() {
+                        document.getElementById('progressBarContainer').style.display = 'block';
+                        document.getElementById('progressBar').style.width = '0%';
+                    };
+            
+                    xhr.onloadend = function() {
+                        if (xhr.status === 200) {
+                            const response = JSON.parse(xhr.responseText);
+                            fps = response.fps; // Actualizar el FPS del video subido
+                            checkProcessingProgress();
+                        } else {
+                            document.getElementById('asciiContainer').textContent = 'Error al procesar el video.';
+                        }
+                    };
+            
+                    xhr.send(formData);
+                });
+            
+                function clearPreviousData() {
+                    document.getElementById('asciiContainer').textContent = '';
+                    const progressBar = document.getElementById('progressBar');
+                    progressBar.style.width = '0%';
+                    clearInterval(interval); // Detener cualquier intervalo previo
+                    isPaused = false;
+                    currentFrame = 0;
+                    frames = [];
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    audioPlayer.pause();
+                    audioPlayer.currentTime = 0;
+                    audioPlayer.src = '';
+                    document.getElementById('pauseButton').disabled = false;
+                    document.getElementById('resumeButton').disabled = true;
                 }
-            }
-
-            audioPlayer.play();
-
-            interval = setInterval(displayNextFrame, frameInterval);
-
-            audioPlayer.addEventListener('ended', () => {
-                clearInterval(interval);
-            });
-
-            document.getElementById('pauseButton').addEventListener('click', () => {
-                isPaused = true;
-                audioPlayer.pause();
-                document.getElementById('pauseButton').disabled = true;
-                document.getElementById('resumeButton').disabled = false;
-            });
-
-            document.getElementById('resumeButton').addEventListener('click', () => {
-                isPaused = false;
-                audioPlayer.play();
-                document.getElementById('pauseButton').disabled = false;
-                document.getElementById('resumeButton').disabled = true;
-            });
-
-            document.getElementById('restartButton').addEventListener('click', () => {
-                isPaused = false;
-                clearInterval(interval);
-                currentFrame = 0;
-                asciiContainer.textContent = '';
-                audioPlayer.currentTime = 0;
-                audioPlayer.play();
-                interval = setInterval(displayNextFrame, frameInterval);
-                document.getElementById('pauseButton').disabled = false;
-                document.getElementById('resumeButton').disabled = true;
-            });
-        }
-    </script>
+            
+                function checkProcessingProgress() {
+                    const interval = setInterval(function() {
+                        fetch('/progress')
+                            .then(response => response.json())
+                            .then(data => {
+                                const progressBar = document.getElementById('progressBar');
+                                progressBar.style.width = data.progress + '%';
+            
+                                if (data.progress >= 100) {
+                                    clearInterval(interval);
+                                    fetch('/ascii')
+                                        .then(response => response.json())
+                                        .then(data => {
+                                            if (data.error) {
+                                                document.getElementById('asciiContainer').textContent = data.error;
+                                            } else {
+                                                fetch('/audio')
+                                                    .then(audioResponse => audioResponse.blob())
+                                                    .then(audioBlob => {
+                                                        const audioUrl = URL.createObjectURL(audioBlob);
+                                                        const audioPlayer = document.getElementById('audioPlayer');
+                                                        audioPlayer.src = audioUrl;
+                                                        frames = data.frames;
+                                                        playAsciiVideo(frames, audioPlayer, fps); // Pasar el FPS al reproductor
+                                                    })
+                                                    .catch(error => {
+                                                        console.error('Error al obtener el audio:', error);
+                                                    });
+                                            }
+                                        })
+                                        .catch(error => {
+                                            console.error('Error:', error);
+                                            document.getElementById('asciiContainer').textContent = 'Error al obtener los frames ASCII.';
+                                        });
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                            });
+                    }, 1000);
+                }
+            
+                function playAsciiVideo(frames, audioPlayer, fps) {
+                    currentFrame = 0;
+                    const asciiContainer = document.getElementById('asciiContainer');
+                    const frameInterval = 1000 / fps; // Calcular el intervalo en función del FPS
+            
+                    function displayNextFrame() {
+                        if (!isPaused) {
+                            if (currentFrame < frames.length) {
+                                asciiContainer.textContent = frames[currentFrame];
+                                currentFrame++;
+                            } else {
+                                clearInterval(interval);
+                            }
+                        }
+                    }
+            
+                    audioPlayer.play();
+            
+                    interval = setInterval(displayNextFrame, frameInterval);
+            
+                    audioPlayer.addEventListener('ended', () => {
+                        clearInterval(interval);
+                    });
+            
+                    document.getElementById('pauseButton').addEventListener('click', () => {
+                        isPaused = true;
+                        audioPlayer.pause();
+                        document.getElementById('pauseButton').disabled = true;
+                        document.getElementById('resumeButton').disabled = false;
+                    });
+            
+                    document.getElementById('resumeButton').addEventListener('click', () => {
+                        isPaused = false;
+                        audioPlayer.play();
+                        document.getElementById('pauseButton').disabled = false;
+                        document.getElementById('resumeButton').disabled = true;
+                    });
+            
+                    document.getElementById('restartButton').addEventListener('click', () => {
+                        isPaused = false;
+                        clearInterval(interval);
+                        currentFrame = 0;
+                        asciiContainer.textContent = '';
+                        audioPlayer.currentTime = 0;
+                        audioPlayer.play();
+                        interval = setInterval(displayNextFrame, frameInterval);
+                        document.getElementById('pauseButton').disabled = false;
+                        document.getElementById('resumeButton').disabled = true;
+                    });
+                }
+            </script>
+            
 </body>
 </html>
